@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HSV Diligentia · Drankspel</title>
+    <style>
+      :root { --brand: #ed1c24; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: var(--brand);
+        color: #fff;
+        font-family: "Graphik", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+      }
+      .wrap { width: min(880px, 92vw); text-align: center; padding: 32px 16px 48px; }
+      h1 { margin: 0 0 6px; font-size: clamp(28px, 6vw, 56px); font-style: italic; letter-spacing: 0.2px; }
+      h2 { margin: 0 0 28px; font-size: clamp(16px, 3.2vw, 28px); font-weight: 500; opacity: 0.95; }
+      button {
+        appearance: none;
+        background: #fff;
+        color: var(--brand);
+        border: none;
+        border-radius: 999px;
+        padding: 14px 28px;
+        font: 600 18px/1 "Graphik", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+      }
+      button:hover { transform: translateY(-1px); }
+      button:active { transform: translateY(0); opacity: 0.9; }
+      button:focus { outline: 3px solid #fff; outline-offset: 4px; }
+      #prompt { margin-top: 22px; min-height: 2.6em; font-size: clamp(18px, 3.6vw, 28px); line-height: 1.35; font-weight: 500; white-space: pre-wrap; }
+      .content { padding: 0 6px; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap" role="main">
+      <div class="content">
+        <h1>HSV Diligentia</h1>
+        <h2>Drankspel</h2>
+        <button id="drawBtn" type="button" aria-controls="prompt">Klik hier</button>
+        <div id="prompt" aria-live="polite"></div>
+      </div>
+    </main>
+
+    <script>
+      const PROMPTS = [
+        "Roast iemand links van je. Als je te lief bent, neem 2 slokken.",
+        "Wie in de groep doet altijd alsof ze meer weten dan ze echt doen? Die neemt 2 slokken.",
+        "Kies iemand waarvan je denkt dat ze de slechtste pick-up lines hebben. Die moet er eentje zeggen of drinken.",
+        "Iedereen die ooit een ex teruggenomen heeft: neem een slok.",
+        "Vertel wie volgens jou de grootste dramaqueen is. Die neemt een slok.",
+        "Roast de persoon tegenover je. Als de groep niet lacht, drink jij.",
+        "Kies iemand die vanaf nu jouw 'sexy wingman/wingwoman' is. Jullie drinken samen.",
+        "Wie van de groep zou het slechtst zijn in bed? Die neemt 2 slokken.",
+        "Iedereen die ooit een beschamende sext heeft gestuurd: neem een slok.",
+        "Doe je beste (of slechtste) verleidelijke blik naar de groep. Als er gelachen wordt, neem 2 slokken.",
+        "Wijs iemand aan die volgens jou het meest waarschijnlijk vreemdgaat. Die neemt een slok.",
+        "Vertel een gênant verhaal over je liefdesleven of neem 2 slokken.",
+        "Iedereen die ooit een dronken zoen heeft gegeven die ze niet meer weten: neem een slok.",
+        "Roast de kledingstijl van iemand in de groep. Slachtoffer drinkt mee.",
+        "Doe een slechte striptease move of neem 2 slokken.",
+        "Wie is volgens jou de grootste flirt in de groep? Die neemt 2 slokken.",
+        "Iedereen die ooit iemand 'per ongeluk' geslided in de DM: neem een slok.",
+        "Kies iemand die nu hun laatste DM hardop moet lezen of drinken.",
+        "Wie in de groep zou je absoluut nooit daten? Die neemt 2 slokken.",
+        "Doe een overdreven sexy catwalk. Als je weigert, neem een slok.",
+        "Iedereen die ooit een crush had op een onbereikbare celebrity: neem een slok.",
+        "Roast iemands dansmoves. Die persoon moet het nu bewijzen of drinken.",
+        "Wie hier stuurt de slechtste dronken berichten? Die neemt 2 slokken.",
+        "Iedereen die ooit met iemand zoende die ze eigenlijk niet mochten: neem een slok.",
+        "Wijs de grootste control freak aan. Die neemt een slok.",
+        "Iedereen die ooit een gênante almost-hookup had: neem een slok.",
+        "Doe een sexy pose voor de groep. Als er boegeroep komt, neem 2 slokken.",
+        "Roast iemands muzieksmaak. Beide drinken.",
+        "Iedereen die ooit een spraakmemo stuurde waar ze spijt van hadden: neem een slok.",
+        "Kies iemand die nu een slechte pickup line tegen jou moet zeggen. Als het flopt, drinkt diegene.",
+        "Iedereen die ooit iemand per ongeluk 'mama' of 'papa' noemde in bed (of bijna): neem 2 slokken.",
+        "Wijs iemand aan die het meest waarschijnlijk met een ex opnieuw in bed belandt. Die neemt een slok.",
+        "Roast jezelf hardop. Als de groep vindt dat het te soft is, neem 2 slokken.",
+        "Iedereen die ooit een beschamende bijnaam had van een partner: neem een slok.",
+        "Doe een sexy of stomme blik naar je buur. Als ze lachen, drink jij.",
+        "Wie is de meest chaotische dronkaard? Die neemt 2 slokken.",
+        "Roast iemands lach. Slachtoffer drinkt ook.",
+        "Iedereen die ooit ongepaste emoji's stuurde: neem een slok.",
+        "Kies iemand die een geheime guilty pleasure moet opbiechten of drinken.",
+        "Wie hier is het meest waarschijnlijk om met de verkeerde persoon wakker te worden? Die neemt een slok.",
+        "Doe je slechtste kusgeluid. Als niemand het wil horen, neem 2 slokken.",
+        "Iedereen die ooit dronken huilde om een ex: neem een slok.",
+        "Wijs iemand aan die de slechtste ochtendkater vibes heeft. Die neemt 2 slokken.",
+        "Roast iemands social media gedrag. Slachtoffer drinkt.",
+        "Iedereen die ooit een appje verwijderde uit schaamte: neem een slok.",
+        "Kies iemand die nu een sexy dansje doet of 2 slokken neemt.",
+        "Wie van de groep is de grootste roddelaar? Die neemt een slok.",
+        "Iedereen die ooit een verkeerde naam zei tijdens flirten of meer: neem een slok.",
+        "Roast iemands kapsel. Als ze beledigd zijn, drink jij.",
+        "Iedereen die ooit een crush had op iemand hier: neem een slok.",
+        "Doe alsof je iemand in de groep probeert te verleiden. Als niemand onder de indruk is, drink jij.",
+        "Wijs iemand aan die volgens jou het meest kansloos dronken wordt. Die neemt 2 slokken.",
+        "Iedereen die ooit een beschamende Tindermatch had: neem een slok.",
+        "Roast iemand en laat ze zelf ook drinken."
+      ];
+
+      function shuffle(array) {
+        const a = array.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+
+      let cycle = shuffle(PROMPTS);
+      let idx = 0;
+
+      function nextPrompt() {
+        if (idx >= cycle.length) {
+          cycle = shuffle(PROMPTS);
+          idx = 0;
+        }
+        const text = cycle[idx++];
+        document.getElementById("prompt").textContent = text;
+      }
+
+      document.getElementById("drawBtn").addEventListener("click", nextPrompt);
+    </script>
+  </body>
+</html>
