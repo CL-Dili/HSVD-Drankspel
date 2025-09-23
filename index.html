@@ -3,21 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ed1c24" />
     <title>HSV Diligentia · Drankspel</title>
     <style>
-      :root { --brand: #ed1c24; }
+      :root { --brand: #ed1c24; --text: #fff; --bg: var(--brand); }
       html, body { height: 100%; }
+      /* Base */
       body {
         margin: 0;
-        background: var(--brand);
-        color: #fff;
+        background: var(--bg);
+        color: var(--text);
         font-family: "Graphik", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         display: grid;
         place-items: center;
       }
-      .wrap { width: min(880px, 92vw); text-align: center; padding: 32px 16px 48px; }
+      .wrap {
+        width: min(880px, 92vw);
+        text-align: center;
+        padding: calc(24px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+      }
       h1 { margin: 0 0 6px; font-size: clamp(28px, 6vw, 56px); font-style: italic; letter-spacing: 0.2px; }
       h2 { margin: 0 0 28px; font-size: clamp(16px, 3.2vw, 28px); font-weight: 500; opacity: 0.95; }
+
+      /* Buttons */
+      .controls { display: grid; grid-template-columns: 1fr; gap: 12px; justify-items: center; }
+      .row { display: grid; grid-auto-flow: column; gap: 10px; width: 100%; justify-content: center; }
+
       button {
         appearance: none;
         background: #fff;
@@ -33,21 +44,55 @@
       button:hover { transform: translateY(-1px); }
       button:active { transform: translateY(0); opacity: 0.9; }
       button:focus { outline: 3px solid #fff; outline-offset: 4px; }
-      #prompt { margin-top: 22px; min-height: 2.6em; font-size: clamp(18px, 3.6vw, 28px); line-height: 1.35; font-weight: 500; white-space: pre-wrap; }
+      button.secondary { background: rgba(255,255,255,0.12); color: #fff; backdrop-filter: blur(2px); }
+      button.secondary:focus { outline-color: rgba(255,255,255,0.8); }
+
+      /* Mobile-first sizing */
+      @media (max-width: 520px) {
+        .row { grid-auto-flow: row; }
+        button { width: 100%; padding: 16px 22px; font-size: 18px; }
+      }
+
+      /* Prompt */
+      #prompt { 
+        margin-top: 22px; 
+        min-height: 2.8em; 
+        font-size: clamp(18px, 3.9vw, 28px); 
+        line-height: 1.35; 
+        font-weight: 600; 
+        white-space: pre-wrap; 
+        padding: 8px 6px; 
+      }
       .content { padding: 0 6px; }
+
+      /* Fade-in for new prompt, respect reduced motion */
+      .fade { opacity: 0; transform: translateY(6px); }
+      .fade.show { opacity: 1; transform: none; transition: opacity 180ms ease, transform 180ms ease; }
+      @media (prefers-reduced-motion: reduce) {
+        .fade, .fade.show { transition: none; transform: none; }
+      }
+
+      /* Tap-anywhere helper area on small screens */
+      .tapanywhere { margin-top: 8px; font-size: 13px; opacity: 0.8; }
     </style>
   </head>
   <body>
     <main class="wrap" role="main">
-      <div class="content">
+      <div class="content" id="content">
         <h1>HSV Diligentia</h1>
         <h2>Drankspel</h2>
-        <button id="drawBtn" type="button" aria-controls="prompt">Klik hier</button>
-        <div id="prompt" aria-live="polite"></div>
+        <div class="controls" aria-label="Bediening">
+          <div class="row">
+            <button id="drawBtn" type="button" aria-controls="prompt" title="Volgende prompt">Volgende</button>
+            <button id="undoBtn" type="button" class="secondary" title="Vorige prompt (één stap terug)">Terug</button>
+          </div></div>
+        <div id="prompt" class="fade" aria-live="polite"></div>
+        <div class="tapanywhere" aria-hidden="true">Tip: tik ergens op het scherm of druk op spatie/enter voor de volgende.</div>
       </div>
     </main>
 
     <script>
+      // --- Data ---
       const PROMPTS = [
         "Roast iemand links van je. Als je te lief bent, neem 2 slokken.",
         "Wie in de groep doet altijd alsof ze meer weten dan ze echt doen? Die neemt 2 slokken.",
@@ -170,6 +215,13 @@
         "Iedereen die zich nu aangesproken voelt, neem een slok."
       ];
 
+      // --- Helpers ---
+      const $ = (sel) => document.querySelector(sel);
+      const promptEl = $('#prompt');
+      const drawBtn = $('#drawBtn');
+      const undoBtn = $('#undoBtn');
+      const contentEl = $('#content');
+
       function shuffle(array) {
         const a = array.slice();
         for (let i = a.length - 1; i > 0; i--) {
@@ -179,19 +231,141 @@
         return a;
       }
 
-      let cycle = shuffle(PROMPTS);
+      // Persist cycle + index so a reload mid-game doesn't instantly repeat
+      let cycle = [];
       let idx = 0;
+      let history = [];
 
-      function nextPrompt() {
-        if (idx >= cycle.length) {
-          cycle = shuffle(PROMPTS);
-          idx = 0;
-        }
-        const text = cycle[idx++];
-        document.getElementById("prompt").textContent = text;
+      function saveState() {
+        localStorage.setItem('dili_cycle', JSON.stringify(cycle));
+        localStorage.setItem('dili_idx', String(idx));
+        localStorage.setItem('dili_hist', JSON.stringify(history));
+      }
+      function loadState() {
+        try {
+          const c = JSON.parse(localStorage.getItem('dili_cycle') || 'null');
+          const i = parseInt(localStorage.getItem('dili_idx') || '0', 10);
+          const h = JSON.parse(localStorage.getItem('dili_hist') || '[]');
+          if (Array.isArray(c) && c.length) { cycle = c; idx = Math.min(Math.max(0, i), c.length); history = h || []; }
+        } catch { /* no-op */ }
       }
 
-      document.getElementById("drawBtn").addEventListener("click", nextPrompt);
+      function resetCycle() {
+        cycle = shuffle(PROMPTS);
+        idx = 0;
+        history = [];
+        saveState();
+      }
+
+      function setPrompt(text) {
+        // fade-in
+        promptEl.classList.remove('show');
+        // next frame
+        requestAnimationFrame(() => {
+          promptEl.textContent = text;
+          promptEl.classList.add('show');
+        });
+      }
+
+      function nextPrompt({vibrate=true} = {}) {
+        if (!cycle.length || idx >= cycle.length) {
+          resetCycle();
+        }
+        const text = cycle[idx++];
+        history.push(text);
+        saveState();
+        setPrompt(text);
+        if (vibrate && 'vibrate' in navigator) navigator.vibrate(10);
+      }
+
+      function prevPrompt() {
+        if (history.length <= 1) return; // nothing to go back to
+        // current is last shown; remove it and step idx back
+        history.pop();
+        idx = Math.max(0, idx - 1);
+        const prev = history[history.length - 1] || cycle[idx - 1] || '';
+        saveState();
+        setPrompt(prev);
+      }
+
+      async function shareCurrent() {
+        const text = promptEl.textContent.trim();
+        if (!text) return;
+        const title = 'HSV Diligentia · Drankspel';
+        try {
+          if (navigator.share) {
+            await navigator.share({ title, text });
+          } else {
+            await navigator.clipboard.writeText(text);
+            toast('Gekopieerd naar klembord');
+          }
+        } catch (e) {
+          // user cancelled share; ignore
+        }
+      }
+
+      async function copyCurrent() {
+        const text = promptEl.textContent.trim();
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          toast('Gekopieerd naar klembord');
+        } catch {
+          toast('Kopiëren mislukt');
+        }
+      }
+
+      function toast(msg) {
+        const el = document.createElement('div');
+        el.textContent = msg;
+        Object.assign(el.style, {
+          position: 'fixed',
+          left: '50%',
+          bottom: `calc(18px + env(safe-area-inset-bottom))`,
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          padding: '10px 14px',
+          borderRadius: '999px',
+          font: '500 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial',
+          zIndex: 999,
+          opacity: 0,
+          transition: 'opacity 160ms ease',
+        });
+        document.body.appendChild(el);
+        requestAnimationFrame(() => { el.style.opacity = 1; });
+        setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 180); }, 1400);
+      }
+
+      // --- Events ---
+      drawBtn.addEventListener('click', () => nextPrompt());
+      undoBtn.addEventListener('click', prevPrompt);
+
+      // Tap anywhere to advance
+      contentEl.addEventListener('click', (e) => {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'button') return; // regular button handlers
+        nextPrompt();
+      });
+
+      // Keyboard shortcuts: Space / Enter -> next, Backspace / ArrowLeft -> prev
+      window.addEventListener('keydown', (e) => {
+        const key = e.key;
+        if (key === ' ' || key === 'Spacebar' || key === 'Enter') { e.preventDefault(); nextPrompt({vibrate:false}); }
+        if (key === 'Backspace' || key === 'ArrowLeft') { e.preventDefault(); prevPrompt(); }
+      });
+
+      // Load state and show first prompt
+      loadState();
+      if (!cycle.length) resetCycle();
+      if (history.length) {
+        setPrompt(history[history.length - 1]);
+      } else {
+        nextPrompt({vibrate:false});
+      }
+
+      // Ensure fade class is present for initial render
+      requestAnimationFrame(() => promptEl.classList.add('show'));
     </script>
   </body>
 </html>
